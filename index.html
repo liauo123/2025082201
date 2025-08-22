@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0" />
+  <title>音符節拍練習</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes beat { 0%{transform:scale(1);background-color:rgb(59,130,246)} 50%{transform:scale(1.2);background-color:rgb(37,99,235)} 100%{transform:scale(1);background-color:rgb(59,130,246)} }
+    .beat-animation{animation:beat .18s ease-in-out}
+    .note-display{font-size:3rem;font-weight:bold}
+
+    /* 四個固定間格，數字置於音符正下方 */
+    .note-row{display:flex;justify-content:center;align-items:flex-end;gap:3.6rem}
+    @media (min-width:768px){.note-row{gap:5.2rem}}
+    .note-item{position:relative;display:flex;flex-direction:column;align-items:center}
+    .note-symbol{font-size:2.6rem;line-height:1}
+    .note-number{margin-top:.55rem;font-size:1rem;color:#6b7280;font-weight:700}
+
+    /* 高亮 & 提示 */
+    .highlight-demo .note-symbol,
+    .note-symbol.highlight-demo{color:#3b82f6;background:#dbeafe;padding:8px 12px;border-radius:12px;transform:scale(1.08);transition:all .18s ease}
+    .highlight-user .note-symbol,
+    .note-symbol.highlight-user{color:#16a34a;background:#dcfce7;padding:8px 12px;border-radius:12px;transform:scale(1.08);transition:all .12s ease;box-shadow:0 0 0 3px rgba(34,197,94,.25)}
+    .note-hint{position:absolute;top:-1.6rem;padding:2px 8px;border-radius:9999px;font-size:.78rem;font-weight:800;color:#fff;pointer-events:none;white-space:nowrap}
+    .note-hint.demo{background:linear-gradient(90deg,#6366f1,#8b5cf6)}
+    .note-hint.user{background:linear-gradient(90deg,#10b981,#22c55e)}
+
+    /* 倒數遮罩 */
+    .countdown-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:50}
+    .countdown-number{font-size:6rem;font-weight:900;color:#fff;text-shadow:0 6px 18px rgba(0,0,0,.35)}
+
+    /* 觸控優化（平板） */
+    html,body{height:100%;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+    .touch-friendly{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+    button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+    *{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+    .tap-giant{min-height:100px;min-width:260px;font-size:clamp(20px,3.2vw,28px);padding:1.25rem 2.5rem}
+    .ctrl-btn{min-height:64px;padding:0.9rem 1.3rem;font-size:clamp(14px,2.4vw,18px)}
+    @media (min-width:768px) and (max-width:1024px){
+      .note-display{font-size:4.2rem}
+      .note-symbol{font-size:3rem}
+      .tap-giant{min-height:110px;min-width:300px}
+      .note-number{font-size:1.05rem}
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-800 min-h-screen flex items-center justify-center p-2 md:p-4 touch-friendly" oncontextmenu="return false;">
+  <div class="bg-white rounded-3xl shadow-2xl p-4 md:p-8 max-w-4xl w-full mx-auto">
+    <div class="text-center mb-6 md:mb-8">
+      <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">🎵 音符節拍練習（平板優化）</h1>
+      <p class="text-sm md:text-base text-gray-600">每小節固定 4 格（4拍）。每格顯示：♩（四分）或 ♫（單個八分）。</p>
+    </div>
+
+    <!-- 進度顯示 -->
+    <div class="flex justify-between items-center mb-4 md:mb-6 bg-gray-100 rounded-xl p-3 md:p-4">
+      <div class="text-center">
+        <div class="text-xl md:text-2xl font-bold text-blue-600" id="currentMeasure">1</div>
+        <div class="text-xs md:text-sm text-gray-600">小節 / 10</div>
+      </div>
+      <div class="text-center">
+        <div class="text-xl md:text-2xl font-bold text-green-600" id="correctCount">0</div>
+        <div class="text-xs md:text-sm text-gray-600">正確</div>
+      </div>
+      <div class="text-center">
+        <div class="text-xl md:text-2xl font-bold text-red-600" id="wrongCount">0</div>
+        <div class="text-xs md:text-sm text-gray-600">錯誤</div>
+      </div>
+    </div>
+
+    <!-- 當前小節 -->
+    <div class="text-center mb-6 md:mb-8 bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-4 md:p-6">
+      <h3 class="text-lg md:text-xl font-semibold text-gray-700 mb-3 md:mb-4">第 <span id="measureNumber">1</span> 小節</h3>
+      <div class="note-display mb-3 md:mb-4" style="min-height: 120px;">
+        <div id="currentMeasureNotes" class="note-row"></div>
+      </div>
+      <div class="text-xs md:text-sm text-gray-500 mt-3 md:mt-4" id="measureDescription">
+        規則：<b>♩必須按 1 下（連按 2 下錯）</b>、<b>♫必須「連續」按 2 下（按 1 下錯）</b>；
+        每一下與節奏音時間差<b>超過 0.3 秒就錯</b>。偵測亂按會直接判錯。
+        開始練習時會 3-2-1 倒數，並在倒數後<b>0.5 秒</b>才開始發出節奏音。
+      </div>
+    </div>
+
+    <!-- 節拍器 -->
+    <div class="flex justify-center mb-4 md:mb-6">
+      <div class="flex space-x-3 md:space-x-4" id="beatIndicator" aria-hidden="true">
+        <div class="w-14 h-14 md:w-16 md:h-16 bg-gray-300 rounded-full flex items-center justify-center text-lg md:text-xl font-bold">1</div>
+        <div class="w-14 h-14 md:w-16 md:h-16 bg-gray-300 rounded-full flex items-center justify-center text-lg md:text-xl font-bold">2</div>
+        <div class="w-14 h-14 md:w-16 md:h-16 bg-gray-300 rounded-full flex items-center justify-center text-lg md:text-xl font-bold">3</div>
+        <div class="w-14 h-14 md:w-16 md:h-16 bg-gray-300 rounded-full flex items-center justify-center text-lg md:text-xl font-bold">4</div>
+      </div>
+    </div>
+
+    <!-- 主按鈕（大觸控區）-->
+    <div class="text-center mb-4 md:mb-6">
+      <button id="tapButton" class="tap-giant bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white font-extrabold rounded-full shadow-lg transform transition-all duration-150 hover:scale-105 active:scale-95 touch-friendly" aria-label="點擊節拍">
+        點擊節拍！
+      </button>
+    </div>
+
+    <!-- 控制按鈕 -->
+    <div class="grid grid-cols-2 md:flex md:justify-center gap-2 md:gap-4 mb-4 md:mb-6">
+      <button id="demoButton" class="ctrl-btn bg-purple-500 hover:bg-purple-600 active:bg-purple-700 text-white font-bold rounded-xl touch-friendly">🎵 聽示範</button>
+      <button id="startButton" class="ctrl-btn bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-bold rounded-xl touch-friendly">開始練習</button>
+      <button id="nextButton" class="ctrl-btn bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white font-bold rounded-xl touch-friendly" disabled>下一小節</button>
+      <button id="resetButton" class="ctrl-btn bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-bold rounded-xl touch-friendly">重新開始</button>
+    </div>
+
+    <!-- 結果 -->
+    <div id="resultMessage" class="text-center mb-4 md:mb-6 hidden">
+      <div class="bg-gray-100 rounded-xl p-3 md:p-4">
+        <div class="text-xl md:text-2xl font-bold mb-2" id="resultText"></div>
+        <div class="text-xs md:text-sm text-gray-600" id="resultDetail"></div>
+      </div>
+    </div>
+
+    <!-- 說明 -->
+    <div class="bg-gray-50 rounded-xl p-3 md:p-4 text-xs md:text-sm text-gray-600">
+      <h3 class="font-bold mb-2">音符說明：</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-1 md:gap-2">
+        <div>• 四分音符 (♩)：1 拍（整格，需按 <b>1 下</b>；連按 2 下錯）</div>
+        <div>• 八分音符 (♫)：0.5 拍（同一格會發兩下聲；需「連續」按 <b>2 下</b>；按 1 下錯）</div>
+        <div>• 正確：每一下與節奏音時間差 ≤ 0.3 秒；<b>超過 0.3 秒即錯</b></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 倒數遮罩 -->
+  <div id="countdownOverlay" class="countdown-mask hidden">
+    <div id="countdownNumber" class="countdown-number">3</div>
+  </div>
+
+  <script>
+    class RhythmPractice {
+      constructor() {
+        /* 狀態 */
+        this.currentMeasure = 1;
+        this.totalMeasures = 10;
+        this.correctCount = 0;
+        this.wrongCount = 0;
+        this.isPlaying = false;
+        this.currentBeat = 0;
+
+        /* 時序設定 */
+        this.bpm = 80;
+        this.beatInterval = null;
+        this.lastWholeBeatShown = -1;
+
+        /* 題型（由易到難） */
+        this.measureBeats = []; // ['Q' 或 'E'] * 4
+        this.PATTERNS = [
+          ['Q','Q','Q','Q'], // 1
+          ['Q','Q','Q','Q'], // 2
+          ['Q','Q','Q','E'], // 3
+          ['Q','Q','E','Q'], // 4
+          ['E','Q','Q','Q'], // 5
+          ['Q','E','Q','Q'], // 6
+          ['Q','Q','E','E'], // 7
+          ['E','Q','E','Q'], // 8
+          ['Q','E','Q','E'], // 9
+          ['E','E','E','E']  // 10
+        ];
+
+        /* 音效 */
+        this.audioContext = null;
+
+        /* 評量資料 */
+        this.expectedTimesPerBeat = [[],[],[],[]]; // 每格（ms）
+        this.tapTimesMs = [];                      // 使用者點擊（ms）
+        this.toleranceMs = 300;                    // ±0.3s
+        this.scheduledBeatTimers = [];
+        this.scheduledSecondTimers = [];
+
+        /* 亂按偵測 */
+        this.lastTapAt = 0;                 // 去抖
+        this.spamMaxTaps = 10;              // 一小節總點擊過多
+        this.spamBurstWindowMs = 280;       // 視為連續亂按的時間窗
+        this.spamBurstCount = 3;            // 窗內 >=3 次
+
+        this.initEls();
+        this.bindEvents();
+        this.generateMeasure();
+      }
+
+      initEls(){
+        this.currentMeasureEl = document.getElementById('currentMeasure');
+        this.correctCountEl = document.getElementById('correctCount');
+        this.wrongCountEl = document.getElementById('wrongCount');
+        this.measureNumberEl = document.getElementById('measureNumber');
+        this.currentMeasureNotesEl = document.getElementById('currentMeasureNotes');
+        this.measureDescriptionEl = document.getElementById('measureDescription');
+        this.beatIndicator = document.getElementById('beatIndicator');
+        this.tapButton = document.getElementById('tapButton');
+        this.demoButton = document.getElementById('demoButton');
+        this.startButton = document.getElementById('startButton');
+        this.nextButton = document.getElementById('nextButton');
+        this.resetButton = document.getElementById('resetButton');
+        this.resultMessage = document.getElementById('resultMessage');
+        this.resultText = document.getElementById('resultText');
+        this.resultDetail = document.getElementById('resultDetail');
+        this.countdownOverlay = document.getElementById('countdownOverlay');
+        this.countdownNumber = document.getElementById('countdownNumber');
+      }
+
+      bindEvents(){
+        /* —— 音訊解鎖：第一次觸控就建立/喚醒 —— */
+        const unlockAudio = async () => {
+          if (!this.audioContext){
+            try{
+              this.audioContext = new (window.AudioContext||window.webkitAudioContext)();
+            }catch(e){ /* ignore */ }
+          }
+          if (this.audioContext && this.audioContext.state === 'suspended'){
+            try{ await this.audioContext.resume(); }catch(e){}
+          }
+        };
+        document.addEventListener('pointerdown', unlockAudio, {passive:false, once:true});
+
+        /* —— 主要操作改用 Pointer Events，避免平板 click 雙觸發 —— */
+        this.tapButton.addEventListener('pointerdown', (e)=>{
+          if (!e.isPrimary) return;
+          e.preventDefault();
+          this.tapButton.setPointerCapture?.(e.pointerId);
+          this.handleTap();          // 按下立刻回饋音 + 記錄（若在練習中）
+        }, {passive:false});
+
+        this.demoButton.addEventListener('pointerdown', (e)=>{ if(!e.isPrimary) return; e.preventDefault(); this.playDemo(); }, {passive:false});
+        this.startButton.addEventListener('pointerdown',(e)=>{ if(!e.isPrimary) return; e.preventDefault(); this.startPracticeWithCountdown(); }, {passive:false});
+        this.nextButton.addEventListener('pointerdown', (e)=>{ if(!e.isPrimary) return; e.preventDefault(); this.nextMeasure(); }, {passive:false});
+        this.resetButton.addEventListener('pointerdown',(e)=>{ if(!e.isPrimary) return; e.preventDefault(); this.resetPractice(); }, {passive:false});
+
+        /* 防止按鈕在平板上拖曳/長按選字 */
+        [this.tapButton,this.demoButton,this.startButton,this.nextButton,this.resetButton].forEach(btn=>{
+          btn.addEventListener('dragstart', ev=>ev.preventDefault());
+        });
+      }
+
+      /* 題目生成 */
+      generateMeasure(){
+        this.measureBeats = this.PATTERNS[this.currentMeasure-1] || ['Q','Q','Q','Q'];
+        this.displayMeasure();
+      }
+
+      displayMeasure(){
+        this.currentMeasureNotesEl.innerHTML = '';
+        for (let i=0;i<4;i++){
+          const beatType = this.measureBeats[i];
+          const host = document.createElement('div');
+          host.className = 'note-item';
+          host.dataset.beatIndex = i;
+
+          const sym = document.createElement('span');
+          sym.className = 'note-symbol';
+          sym.textContent = (beatType==='Q' ? '♩' : '♫');
+          host.appendChild(sym);
+
+          const num = document.createElement('div');
+          num.className = 'note-number';
+          num.textContent = (i+1);
+          host.appendChild(num);
+
+          this.currentMeasureNotesEl.appendChild(host);
+        }
+        this.measureNumberEl.textContent = this.currentMeasure;
+        this.currentMeasureEl.textContent = this.currentMeasure;
+      }
+
+      /* DOM 輔助 */
+      getBeatHosts(){ return this.currentMeasureNotesEl.querySelectorAll('.note-item'); }
+      highlightBeat(idx, kind='demo'){ const host=this.getBeatHosts()[idx]; if(host) host.classList.add(kind==='demo'?'highlight-demo':'highlight-user'); }
+      resetBeat(idx, kind='demo'){ const host=this.getBeatHosts()[idx]; if(host) host.classList.remove(kind==='demo'?'highlight-demo':'highlight-user'); }
+      resetAllBeats(){
+        this.getBeatHosts().forEach(h=>{
+          h.classList.remove('highlight-demo','highlight-user');
+          const old = h.querySelector('.note-hint'); if (old) old.remove();
+        });
+      }
+      showNoteHint(idx,text,type){
+        const host = this.getBeatHosts()[idx]; if(!host) return;
+        const old = host.querySelector('.note-hint'); if (old) old.remove();
+        const hint = document.createElement('div');
+        hint.className = `note-hint ${type==='demo'?'demo':'user'}`;
+        hint.textContent = text;
+        host.appendChild(hint);
+      }
+      hideNoteHint(idx){
+        const host=this.getBeatHosts()[idx]; if(!host) return;
+        const old=host.querySelector('.note-hint'); if(old) old.remove();
+      }
+
+      /* ====== 聽示範：八分＝同一格連續 2 下 ====== */
+      playDemo(){
+        if (this.isPlaying) return;
+        this.demoButton.disabled = true;
+        this.demoButton.textContent = '播放中...';
+
+        this.resetBeatIndicator();
+        this.resetAllBeats();
+
+        const beatMs = (60/this.bpm)*1000;
+        const qDurSec = (beatMs*0.92)/1000;
+        const eDurSec = (beatMs*0.42)/1000;
+        const secondHitDelay = beatMs*0.5;
+
+        for (let i=0;i<4;i++){
+          const t0 = i*beatMs;
+          const type = this.measureBeats[i];
+
+          setTimeout(()=>{
+            this.highlightBeat(i,'demo');
+            this.showNoteHint(i,'示範','demo');
+
+            if (type==='Q'){
+              this.playBeatSound(qDurSec,'triangle');
+            }else{
+              this.playBeatSound(eDurSec,'square');
+              setTimeout(()=>this.playBeatSound(eDurSec,'square'), secondHitDelay);
+            }
+
+            setTimeout(()=>{
+              this.resetBeat(i,'demo');
+              this.hideNoteHint(i);
+            }, beatMs-60);
+          }, t0);
+        }
+
+        setTimeout(()=>{
+          this.resetBeatIndicator();
+          this.resetAllBeats();
+          this.demoButton.disabled=false;
+          this.demoButton.textContent='🎵 聽示範';
+        }, 4*beatMs + 300);
+      }
+
+      /* ====== 倒數後開始（再延 0.5s 才出節奏音） ====== */
+      async startPracticeWithCountdown(){
+        this.startButton.disabled = true;
+        this.nextButton.disabled = true;
+        this.resultMessage.classList.add('hidden');
+        await this.showCountdown();
+        setTimeout(()=>this.startPractice(500), 0); // 倒數結束後延遲 0.5s
+      }
+      showCountdown(){
+        return new Promise((resolve)=>{
+          const seq=[3,2,1]; let i=0;
+          this.countdownNumber.textContent = seq[i];
+          this.countdownOverlay.classList.remove('hidden');
+          const tick=()=>{
+            i++;
+            if(i<seq.length){ this.countdownNumber.textContent=seq[i]; setTimeout(tick,800); }
+            else{ this.countdownOverlay.classList.add('hidden'); resolve(); }
+          };
+          setTimeout(tick,800);
+        });
+      }
+
+      /* ====== 練習 ====== */
+      startPractice(delayMs=0){
+        this.resetBeatIndicator();
+        this.isPlaying = true;
+        this.currentBeat = 0;
+        this.tapTimesMs = [];
+        this.expectedTimesPerBeat = [[],[],[],[]];
+        this.clearScheduledTimers();
+        this.lastWholeBeatShown = -1;
+
+        const beatMs = (60/this.bpm)*1000;
+        const qDurSec = (beatMs*0.85)/1000;
+        const eDurSec = (beatMs*0.40)/1000;
+        const secondHitDelay = beatMs*0.5;
+
+        for (let i=0;i<4;i++){
+          const t0 = i*beatMs + delayMs;
+          const type = this.measureBeats[i];
+
+          const timer = setTimeout(()=>{
+            this.expectedTimesPerBeat[i][0] = performance.now();
+            if (type==='Q'){
+              this.playBeatSound(qDurSec,'triangle');
+            }else{
+              this.playBeatSound(eDurSec,'square');
+              const secondTimer = setTimeout(()=>{
+                this.expectedTimesPerBeat[i][1] = performance.now();
+                this.playBeatSound(eDurSec,'square');
+              }, secondHitDelay);
+              this.scheduledSecondTimers.push(secondTimer);
+            }
+          }, t0);
+          this.scheduledBeatTimers.push(timer);
+        }
+
+        /* 視覺節拍（用 rAF 平滑） */
+        const step = ()=>{
+          if (!this.isPlaying) return;
+          const elapsedBeats = (performance.now() - (this.startTimeRef || (this.startTimeRef = performance.now() + delayMs))) / ((60/this.bpm)*1000);
+          this.currentBeat = Math.min(elapsedBeats, 4);
+          this.updateBeatIndicator();
+          if (this.currentBeat < 4) requestAnimationFrame(step);
+          else this.endMeasure();
+        };
+        requestAnimationFrame(step);
+      }
+
+      clearScheduledTimers(){
+        this.scheduledBeatTimers.forEach(id=>clearTimeout(id));
+        this.scheduledSecondTimers.forEach(id=>clearTimeout(id));
+        this.scheduledBeatTimers = [];
+        this.scheduledSecondTimers = [];
+        this.startTimeRef = null;
+      }
+
+      /* ====== 點擊：一定要有聲音（回饋），也記錄時間（練習中） ====== */
+      async handleTap(){
+        const now = performance.now();
+        if (now - this.lastTapAt < 90) return; // 更緊的去抖，平板手感更好
+        this.lastTapAt = now;
+
+        // 按鍵回饋音：即使未開始也要發聲
+        this.playTapSound();
+
+        if (!this.isPlaying) return; // 未開始練習不記錄
+
+        // 記錄點擊
+        this.tapTimesMs.push(now);
+
+        // 視覺回饋
+        this.tapButton.classList.add('beat-animation');
+        setTimeout(()=>this.tapButton.classList.remove('beat-animation'),180);
+      }
+
+      /* ====== 結束與評分 ====== */
+      endMeasure(){
+        this.isPlaying = false;
+        this.clearScheduledTimers();
+
+        const spam = this.detectSpam();
+        const okByTiming = this.checkPerBeatExactly();
+        const ok = (!spam) && okByTiming;
+
+        this.showResult(ok, spam);
+
+        this.startButton.disabled = false;
+        if (this.currentMeasure < this.totalMeasures) this.nextButton.disabled = false;
+      }
+
+      /* 嚴格依「每格需要的按鍵數」：
+         - Q：容許窗內「恰好 1 下」（>0.3s、0 或 ≥2 皆錯）
+         - E：容許窗內「恰好 2 下」且為「連續兩下」，各自對應兩擊（>0.3s、數量不符或不連續皆錯）
+         - 4 格至少 3 格正確（60%）才過
+      */
+      checkPerBeatExactly(){
+        const taps = [...this.tapTimesMs].sort((a,b)=>a-b);
+        const used = new Array(taps.length).fill(false);
+        let beatsCorrect = 0;
+        const within = (t, center) => Math.abs(t - center) <= this.toleranceMs;
+
+        for (let i=0;i<4;i++){
+          const type = this.measureBeats[i];
+          const exps = this.expectedTimesPerBeat[i].filter(v=>typeof v==='number');
+          if (exps.length === 0) continue;
+
+          const inWinIdx = [];
+          for (let j=0;j<taps.length;j++){
+            if (used[j]) continue;
+            if (exps.some(e=>within(taps[j], e))) inWinIdx.push(j);
+          }
+
+          if (type === 'Q'){
+            if (inWinIdx.length === 1 && within(taps[inWinIdx[0]], exps[0])){
+              used[inWinIdx[0]] = true;
+              beatsCorrect++;
+            } else {
+              inWinIdx.forEach(idx=>used[idx]=true);
+            }
+          } else { // 'E'
+            if (exps.length<2){ inWinIdx.forEach(idx=>used[idx]=true); continue; }
+            const exactTwo = inWinIdx.length === 2;
+            const consecutive = exactTwo && (inWinIdx[1] === inWinIdx[0] + 1);
+            if (exactTwo && consecutive){
+              const tA = taps[inWinIdx[0]], tB = taps[inWinIdx[1]];
+              if (within(tA, exps[0]) && within(tB, exps[1])){
+                used[inWinIdx[0]] = true;
+                used[inWinIdx[1]] = true;
+                beatsCorrect++;
+              } else {
+                inWinIdx.forEach(idx=>used[idx]=true);
+              }
+            } else {
+              inWinIdx.forEach(idx=>used[idx]=true);
+            }
+          }
+        }
+        return (beatsCorrect/4) >= 0.6;
+      }
+
+      /* 亂按偵測 */
+      detectSpam(){
+        const taps = [...this.tapTimesMs].sort((a,b)=>a-b);
+        if (taps.length > this.spamMaxTaps) return true;
+
+        let i = 0;
+        for (let j=0;j<taps.length;j++){
+          while (taps[j] - taps[i] > this.spamBurstWindowMs) i++;
+          if (j - i + 1 >= this.spamBurstCount) return true;
+        }
+        return false;
+      }
+
+      showResult(ok, spam=false){
+        this.resultMessage.classList.remove('hidden');
+        if (ok){
+          this.correctCount++;
+          this.resultText.textContent='正確！';
+          this.resultText.className='text-2xl font-bold mb-2 text-green-600';
+          this.resultDetail.textContent='♩ 恰好 1 下；♫ 需連續恰好 2 下；每一下在 0.3 秒內。';
+          this.playCorrectSound();
+        }else{
+          this.wrongCount++;
+          this.resultText.textContent='需要練習';
+          this.resultText.className='text-2xl font-bold mb-2 text-red-600';
+          this.resultDetail.textContent = spam
+            ? '偵測到連續亂按（點擊過多或過密）。'
+            : '再試一次：♩ 只能 1 下；♫ 必須連續 2 下；超過 0.3 秒或多/少按都判錯。';
+          this.playWrongSound();
+        }
+        this.correctCountEl.textContent=this.correctCount;
+        this.wrongCountEl.textContent=this.wrongCount;
+
+        if (this.currentMeasure >= this.totalMeasures){
+          setTimeout(()=>this.showFinal(),1000);
+        }
+      }
+
+      nextMeasure(){
+        if (this.currentMeasure < this.totalMeasures){
+          this.currentMeasure++;
+          this.generateMeasure();
+          this.nextButton.disabled = true;
+          this.resultMessage.classList.add('hidden');
+        }
+      }
+
+      showFinal(){
+        const acc = (this.correctCount/this.totalMeasures*100).toFixed(1);
+        let grade, comment, color;
+        if (acc>=90){ grade='A+'; comment='🎉 優秀！你的節拍感非常準確！'; color='text-green-600'; }
+        else if (acc>=80){ grade='A'; comment='👏 很好！繼續保持！'; color='text-green-500'; }
+        else if (acc>=70){ grade='B+'; comment='👍 不錯！再多練幾次更穩定！'; color='text-blue-600'; }
+        else if (acc>=60){ grade='B'; comment='💪 還可以！注意每拍起點與八分的連續雙按。'; color='text-blue-500'; }
+        else if (acc>=50){ grade='C'; comment='📚 需要加強！先從全四分再挑戰八分。'; color='text-orange-500'; }
+        else { grade='D'; comment='🎯 持續練習！跟著示範做節拍分辨。'; color='text-red-500'; }
+
+        this.resultMessage.classList.remove('hidden');
+        this.resultText.innerHTML = `
+          <div class="text-center">
+            <div class="text-4xl font-bold ${color} mb-4">練習完成！</div>
+            <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 mb-4">
+              <div class="text-6xl font-bold ${color} mb-2">${grade}</div>
+              <div class="text-xl text-gray-700 mb-4">總正確率：${acc}%</div>
+              <div class="grid grid-cols-3 gap-4 text-center mb-4">
+                <div><div class="text-2xl font-bold text-green-600">${this.correctCount}</div><div class="text-sm text-gray-600">正確</div></div>
+                <div><div class="text-2xl font-bold text-red-600">${this.wrongCount}</div><div class="text-sm text-gray-600">錯誤</div></div>
+                <div><div class="text-2xl font-bold text-blue-600">—</div><div class="text-sm text-gray-600">完成時間</div></div>
+              </div>
+            </div>
+            <div class="text-lg text-gray-700 leading-relaxed">${comment}</div>
+          </div>`;
+        this.resultDetail.textContent='';
+        this.nextButton.disabled=true;
+        this.playFinalSound(acc);
+      }
+
+      /* ====== 工具 ====== */
+      updateBeatIndicator(){
+        const indicators = this.beatIndicator.children;
+        const k = Math.floor(this.currentBeat);
+        if (k !== this.lastWholeBeatShown){
+          this.lastWholeBeatShown = k;
+          for (let i=0;i<indicators.length;i++){
+            indicators[i].className='w-14 h-14 md:w-16 md:h-16 bg-gray-300 rounded-full flex items-center justify-center text-lg md:text-xl font-bold';
+          }
+          if (k<4){
+            indicators[k].className='w-14 h-14 md:w-16 md:h-16 bg-blue-500 rounded-full flex items-center justify-center text-lg md:text-xl font-bold text-white';
+          }
+        }
+      }
+      resetBeatIndicator(){
+        const indicators = this.beatIndicator.children;
+        for (let i=0;i<indicators.length;i++){
+          indicators[i].className='w-14 h-14 md:w-16 md:h-16 bg-gray-300 rounded-full flex items-center justify-center text-lg md:text-xl font-bold';
+        }
+      }
+
+      resetPractice(){
+        this.isPlaying=false;
+        this.clearScheduledTimers();
+        this.currentMeasure=1; this.correctCount=0; this.wrongCount=0;
+        this.currentBeat=0; this.tapTimesMs=[]; this.expectedTimesPerBeat=[[],[],[],[]];
+        this.updateDisplay(); this.generateMeasure(); this.resetBeatIndicator();
+        this.resultMessage.classList.add('hidden');
+        this.startButton.disabled=false; this.nextButton.disabled=true;
+        this.lastTapAt = 0; this.lastWholeBeatShown = -1;
+      }
+
+      updateDisplay(){
+        this.currentMeasureEl.textContent=this.currentMeasure;
+        this.correctCountEl.textContent=this.correctCount;
+        this.wrongCountEl.textContent=this.wrongCount;
+      }
+
+      /* ====== 聲音工具 ====== */
+      async playSound(freq,durationSec,type='sine',gainValue=0.3){
+        try{
+          if (!this.audioContext) this.audioContext = new (window.AudioContext||window.webkitAudioContext)();
+          if (this.audioContext.state==='suspended') await this.audioContext.resume();
+          const osc=this.audioContext.createOscillator();
+          const gain=this.audioContext.createGain();
+          osc.connect(gain); gain.connect(this.audioContext.destination);
+          osc.frequency.setValueAtTime(freq,this.audioContext.currentTime);
+          osc.type=type;
+          gain.gain.setValueAtTime(gainValue,this.audioContext.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01,this.audioContext.currentTime+durationSec);
+          osc.start(this.audioContext.currentTime);
+          osc.stop(this.audioContext.currentTime+durationSec);
+        }catch(e){ console.log('音效播放失敗:',e); }
+      }
+      playTapSound(){ this.playSound(900,0.09,'square',0.24); }           // 按鍵回饋音（平板稍微更響亮）
+      playCorrectSound(){ this.playSound(523.25,0.2); setTimeout(()=>this.playSound(659.25,0.2),120); setTimeout(()=>this.playSound(783.99,0.26),260); }
+      playWrongSound(){ this.playSound(220,0.38,'sawtooth'); }
+      playBeatSound(durationSec=0.11,wave='square'){ this.playSound(800,durationSec,wave,0.3); }
+      playFinalSound(accuracy){
+        const acc = parseFloat(accuracy);
+        if (acc>=80){
+          this.playSound(523.25,0.26); setTimeout(()=>this.playSound(659.25,0.26),180); setTimeout(()=>this.playSound(783.99,0.26),360); setTimeout(()=>this.playSound(1046.5,0.38),540);
+        }else if (acc>=60){
+          this.playSound(440,0.24); setTimeout(()=>this.playSound(554.37,0.24),200); setTimeout(()=>this.playSound(659.25,0.32),420);
+        }else{
+          this.playSound(349.23,0.34); setTimeout(()=>this.playSound(392,0.34),320);
+        }
+      }
+    }
+
+    const practice = new RhythmPractice();
+  </script>
+</body>
+</html>
